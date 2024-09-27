@@ -52,16 +52,17 @@ while True:
 
             prev_x, prev_y = curr_x, curr_y
 
-            # Check if index finger and middle finger are close (for left click)
-            index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-            middle_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+            # Check if any other finger (except index) is close to the index finger
+            for finger_id in range(mp_hands.HandLandmark.THUMB_TIP, mp_hands.HandLandmark.PINKY_TIP + 1):
+                if finger_id != mp_hands.HandLandmark.INDEX_FINGER_TIP:
+                    other_finger_tip = hand_landmarks.landmark[finger_id]
+                    distance = np.sqrt((index_finger_tip.x - other_finger_tip.x)**2 +
+                                         (index_finger_tip.y - other_finger_tip.y)**2)
 
-            distance = np.sqrt((index_finger_tip.x - middle_finger_tip.x)**2 + 
-                               (index_finger_tip.y - middle_finger_tip.y)**2)
-
-            if distance < 0.05:  # Adjust this threshold as needed
-                pyautogui.click()
-                print("Left Click")
+                    if distance < 0.05:  # Adjust this threshold as needed
+                        pyautogui.click()
+                        print("Left Click")
+                        break  # Exit the loop if a click is detected
 
     # Display the image
     cv2.imshow("Hand Tracking", img)
@@ -73,3 +74,4 @@ while True:
 # Release the webcam and destroy all windows
 cap.release()
 cv2.destroyAllWindows()
+
