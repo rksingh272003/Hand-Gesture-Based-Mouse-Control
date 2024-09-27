@@ -18,6 +18,14 @@ cap = cv2.VideoCapture(0)
 prev_x, prev_y = 0, 0
 smoothening = 7
 
+# Function to check if a finger is raised
+def is_finger_raised(tip, base):
+    return tip.y < base.y  # Finger is raised if tip is higher than the base (lower y value)
+
+# Function to check if the thumb is raised
+def is_thumb_raised(tip, base):
+    return tip.x < base.x  # For thumb, check if it is "left" (or right for flipped) of its base
+
 while True:
     # Read the frame from the webcam
     success, img = cap.read()
@@ -27,6 +35,9 @@ while True:
     # Flip the image horizontally for a later selfie-view display
     img = cv2.flip(img, 1)
 
+    # Get the height and width of the webcam frame for proper scaling
+    frame_height, frame_width, _ = img.shape
+
     # Convert the BGR image to RGB
     imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -35,34 +46,85 @@ while True:
 
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
-            # Draw hand landmarks
+            # Draw hand landmarks on the image
             mp_draw.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-            # Get the position of the index finger tip
+            # Get the position of the index finger tip and base
             index_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
-            x = int(index_finger_tip.x * screen_width)
-            y = int(index_finger_tip.y * screen_height)
+            index_finger_base = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP]
+            
+            # Get the position of the middle finger tip and base
+            middle_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP]
+            middle_finger_base = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_MCP]
 
-            # Smooth the movement
-            curr_x = prev_x + (x - prev_x) / smoothening
-            curr_y = prev_y + (y - prev_y) / smoothening
+            # Get the position of the ring finger tip and base
+            ring_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP]
+            ring_finger_base = hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_MCP]
 
-            # Move the mouse
+            # Get the position of the little finger tip and base
+            little_finger_tip = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP]
+            little_finger_base = hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP]
+
+            # Get the position of the thumb tip and base
+            thumb_tip = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP]
+            thumb_base = hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_CMC]
+
+            # Convert normalized hand coordinates to frame-based coordinates
+            x = int(index_finger_tip.x * frame_width)
+            y = int(index_finger_tip.y * frame_height)
+
+            # Convert the frame-based coordinates to screen coordinates
+            screen_x = np.interp(x, (0, frame_width), (0, screen_width))
+            screen_y = np.interp(y, (0, frame_height), (0, screen_height))
+
+            # Smooth the mouse movement
+            curr_x = prev_x + (screen_x - prev_x) / smoothening
+            curr_y = prev_y + (screen_y - prev_y) / smoothening
+
+            # Move the mouse cursor
             pyautogui.moveTo(curr_x, curr_y)
 
+            # Update previous mouse location
             prev_x, prev_y = curr_x, curr_y
 
-            # Check if any other finger (except index) is close to the index finger
-            for finger_id in range(mp_hands.HandLandmark.THUMB_TIP, mp_hands.HandLandmark.PINKY_TIP + 1):
-                if finger_id != mp_hands.HandLandmark.INDEX_FINGER_TIP:
-                    other_finger_tip = hand_landmarks.landmark[finger_id]
-                    distance = np.sqrt((index_finger_tip.x - other_finger_tip.x)**2 +
-                                         (index_finger_tip.y - other_finger_tip.y)**2)
+            # Check for gestures
 
-                    if distance < 0.05:  # Adjust this threshold as needed
-                        pyautogui.click()
-                        print("Left Click")
-                        break  # Exit the loop if a click is detected
+            # Left Click: Index and middle finger raised
+            if is_finger_raised(index_finger_tip, index_finger_base) and \
+               is_finger_raised(middle_finger_tip, middle_finger_base) and \
+               not is_finger_raised(ring_finger_tip, ring_finger_base):
+                pyautogui.click()
+                print("Left Click")
+                pyautogui.sleep(0.2)  # Prevent rapid multiple clicks
+
+            # Right Click: Index, middle, and ring finger raised
+            elif is_finger_raised(index_finger_tip, index_finger_base) and \
+                 is_finger_raised(middle_finger_tip, middle_finger_base) and \
+                 is_finger_raised(ring_finger_tip, ring_finger_base) and \
+                 not is_finger_raised(little_finger_tip, little_finger_base):
+                pyautogui.click(button='right')
+                print("Right Click")
+                pyautogui.sleep(0.2)  # Prevent rapid multiple clicks
+
+            # Scroll Up: Index, middle, ring, and little finger raised
+            elif is_finger_raised(index_finger_tip, index_finger_base) and \
+                 is_finger_raised(middle_finger_tip, middle_finger_base) and \
+                 is_finger_raised(ring_finger_tip, ring_finger_base) and \
+                 is_finger_raised(little_finger_tip, little_finger_base) and \
+                 not is_thumb_raised(thumb_tip, thumb_base):
+                pyautogui.scroll(25)
+                print("Scroll Up")
+                pyautogui.sleep(0.2)  # Prevent continuous scrolling
+
+            # Scroll Down: All fingers raised (including thumb)
+            elif is_finger_raised(index_finger_tip, index_finger_base) and \
+                 is_finger_raised(middle_finger_tip, middle_finger_base) and \
+                 is_finger_raised(ring_finger_tip, ring_finger_base) and \
+                 is_finger_raised(little_finger_tip, little_finger_base) and \
+                 is_thumb_raised(thumb_tip, thumb_base):
+                pyautogui.scroll(-25)
+                print("Scroll Down")
+                pyautogui.sleep(0.2)  # Prevent continuous scrolling
 
     # Display the image
     cv2.imshow("Hand Tracking", img)
@@ -74,4 +136,3 @@ while True:
 # Release the webcam and destroy all windows
 cap.release()
 cv2.destroyAllWindows()
-
